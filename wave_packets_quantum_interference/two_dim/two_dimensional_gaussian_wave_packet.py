@@ -22,30 +22,33 @@ fps, dur_of_video, time_steps_per_frame = 20, 5, 5
 total_frames = fps * dur_of_video
 
 
-def calculate_psi(time, x_c, kx, sx, y_c, ky, sy):
+def calculate_wave_packet(time, x_c, kx, sx, y_c, ky, sy):
     psi_ = 0.25 * np.square(xg - x_c - 2j * kx * sx**2) / (sx**2 + 1j * time)
     psi_ = np.exp(1j*kx*xg - kx**2 * sx**2 - psi_) / np.sqrt(sx**2 + 1j * time)
     psi_x = np.power(sx**2/(2*np.pi), 0.25) * psi_
-
     psi_ = 0.25 * np.square(yg - y_c - 2j * ky * sy ** 2) / (sy ** 2 + 1j * time)
     psi_ = np.exp(1j * ky * yg - ky ** 2 * sy ** 2 - psi_) / np.sqrt(sy ** 2 + 1j * time)
     psi_y = np.power(sy ** 2 / (2 * np.pi), 0.25) * psi_
-
     return psi_x * psi_y
+
+
+def calculate_psi(time, x_c, kx, sx, y_c, ky, sy):
+    # return calculate_wave_packet(t, xo, kxo, sigma_x, yo, kyo, sigma_y) \
+    #       + calculate_wave_packet(t, -xo, -kxo, sigma_x, yo, kyo, sigma_y)
+
+    psi_ = np.zeros((num_points_x, num_points_y), dtype=np.complex128)
+    for i in range(6):
+        phi = 2 * np.pi * (i - 1) / 6
+        xc = x_c * np.cos(phi) - y_c * np.sin(phi)
+        yc = -x_c * np.sin(phi) + y_c * np.cos(phi)
+        kx_ = kx * np.cos(phi) - ky * np.sin(phi)
+        ky_ = -kxo * np.sin(phi) + ky * np.cos(phi)
+        psi_ += calculate_wave_packet(time, xc, kx_, sx, yc, ky_, sy)
+    return psi_
 
 t = 0
 w_max = np.power(2*np.pi*sigma_x**2, -0.25) * np.power(2*np.pi*sigma_y**2, -0.25)
-# psi = calculate_psi(t, xo, kxo, sigma_x, yo, kyo, sigma_y) \
-#       + calculate_psi(t, -xo, -kxo, sigma_x, yo, kyo, sigma_y)
-
-psi = np.zeros((num_points_x, num_points_y), dtype=np.complex128)
-for i in range(6):
-    phi = 2*np.pi*(i-1)/6
-    xc = xo * np.cos(phi) - yo * np.sin(phi)
-    yc = -xo * np.sin(phi) + yo * np.cos(phi)
-    kx = kxo * np.cos(phi) - kyo * np.sin(phi)
-    ky = -kxo * np.sin(phi) + kyo * np.cos(phi)
-    psi += calculate_psi(t, xc, kx, sigma_x, yc, ky, sigma_y)
+psi = calculate_psi(t, xo, kxo, sigma_x, yo, kyo, sigma_y)
 
 matplotlib.rc('animation', html='html5')  # TODO: check this
 plt.style.use('dark_background')
@@ -58,7 +61,7 @@ axs0[0].axis('off')
 axs0[1].axis('off')
 axs1.axis('off')
 sub_figs[0].suptitle(r"$\Re(\psi)$ & $\Im(\psi)$", fontsize=20)
-sub_figs[1].suptitle(r"|$\psi$|", fontsize=20)
+sub_figs[1].suptitle(r"|$\psi$| - Hexagonal Initial Formation", fontsize=20)
 
 psi_plot = axs1.imshow(np.abs(psi), interpolation='spline16', aspect='auto',
                               cmap="hot", norm=PowerNorm(vmin=0, vmax=w_max, gamma=0.4),
@@ -80,16 +83,7 @@ def update(frame):
         print(f"@ {current_frame//fps} second ...")
 
     for _ in range(time_steps_per_frame):
-        # psi = calculate_psi(t, xo, kxo, sigma_x, yo, kyo, sigma_y) \
-        #       + calculate_psi(t, -xo, -kxo, sigma_x, yo, kyo, sigma_y)
-        psi = np.zeros((num_points_x, num_points_y), dtype=np.complex128)
-        for i in range(6):
-            phi = 2 * np.pi * (i - 1) / 6
-            xc = xo * np.cos(phi) - yo * np.sin(phi)
-            yc = -xo * np.sin(phi) + yo * np.cos(phi)
-            kx = kxo * np.cos(phi) - kyo * np.sin(phi)
-            ky = -kxo * np.sin(phi) + kyo * np.cos(phi)
-            psi += calculate_psi(t, xc, kx, sigma_x, yc, ky, sigma_y)
+        psi = calculate_psi(t, xo, kxo, sigma_x, yo, kyo, sigma_y)
         t += dt
     psi_plot.set_array(np.abs(psi))
     psi_plot_r.set_array(np.real(psi))
