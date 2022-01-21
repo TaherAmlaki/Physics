@@ -1,93 +1,105 @@
 from datetime import datetime
+
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+from matplotlib.animation import FuncAnimation, PillowWriter
 
-fps, num_seconds, dt = 30, 15, 0.005
-total_frames = fps * num_seconds
+save_animation, save_as_gif = False, True
 
-x_min, x_max, num_points = -20, 20, 8000
-x_c, ko, sigma = 3, 2, 1.0
+x_min, x_max, num_points = -10, 10, 1000
 grid = np.linspace(x_min, x_max, num_points)
-dx = (x_max - x_min) / (num_points - 1)
-w2_max = 1 / np.power(2 * np.pi * sigma ** 2, 0.5)
-w_factor = np.power(0.5 * sigma ** 2 / np.pi, 0.25)
+
+xo, ko, sigma = -5, 1, 1
+
+fps, dur_of_video, dt = 10, 3, 0.15
+total_frames = fps * dur_of_video
 
 
-def calculate_psi(xo, k, s):
-    s2 = s**2
-    psi = np.exp(-0.25 * np.square(grid - xo - 2j * k * s2) / (s2 + 1j * t))
-    psi = psi * np.exp(1j * k * xo - k**2 * s2) / np.sqrt(s2 + 1j * t)
-    psi = np.power(0.5 * s2 / np.pi, 0.25) * psi
-    return psi
-
-
-def calculate_wave_packets():
-    not_moving_psi = calculate_psi(0, 0, sigma)
-    moving_psi = calculate_psi(0, ko, sigma)
-    interference_psi = calculate_psi(-x_c, ko, sigma) + calculate_psi(x_c, -ko, sigma)
-    asymmetric_interference_psi = calculate_psi(-x_c, ko, 1.5*sigma) \
-                                  + calculate_psi(x_c, -ko, 0.5 * sigma)
-    return not_moving_psi, moving_psi, interference_psi, asymmetric_interference_psi
-
-
-def init_plot():
-    global fig, axs
-    for ax in axs.flatten():
-        ax.spines["right"].set_linewidth(3)
-        ax.spines["top"].set_linewidth(3)
-        ax.spines['left'].set_linewidth(3)
-        ax.spines['bottom'].set_linewidth(3)
-        ax.set_xlabel("x")
-
-        ax.set_xlim([x_min, x_max])
-        ax.set_ylim([0, 1.05 * w2_max])
-        ax.set_yticks([])
-        ax.set_xticks([])
-        ax.legend(loc="upper left")
-    axs[1, 0].set_ylim([0, 4 * w2_max])
-    axs[1, 1].set_ylim([0, 4 * w2_max])
-    axs[0, 0].set_ylabel(r'|$\psi(x, t)$$\|^2$')
-
-    return zero_plot, linear_plot, interference_plot
-
-
-def update(*args):
-    global t
-    axs[0, 0].set_ylabel(r'|$\psi(x, t={0:.1f})$$\|^2$'.format(t))
-    static_packet_, moving_packet_, interference_, asym_interference_ = calculate_wave_packets()
-
-    zero_plot.set_ydata(np.square(np.absolute(static_packet_)))
-    linear_plot.set_ydata(np.square(np.absolute(moving_packet_)))
-    interference_plot.set_ydata(np.square(np.absolute(interference_)))
-    asym_interference_plot.set_ydata(np.square(np.absolute(asym_interference_)))
-    t += dt
-    return zero_plot, linear_plot, interference_plot, asym_interference_plot
+def calculate_psi(time, x_c, kx, s):
+    psi_ = 0.25 * np.square(grid - x_c - 2j * kx * s**2) / (s**2 + 1j * time)
+    psi_ = np.exp(1j*kx*grid - kx**2 * s**2 - psi_) / np.sqrt(s**2 + 1j * time)
+    return np.power(s**2/(2*np.pi), 0.25) * psi_
 
 
 t = 0
-matplotlib.rc('axes', labelsize=20)
+w_max = np.power(2*np.pi*sigma**2, -0.25)
+not_moving_psi = calculate_psi(t, 0, 0, sigma)
+moving_psi = calculate_psi(t, xo, ko, sigma)
 
-fig, axs = plt.subplots(2, 2, figsize=(12, 12), facecolor="k")
+matplotlib.rc('animation', html='html5')  # TODO: check this
+plt.style.use('dark_background')
 
-static_packet, moving_packet, interference, asym_interference = calculate_wave_packets()
-zero_plot, = axs[0, 0].plot(grid, np.square(np.absolute(static_packet)), '-r',
-                            linewidth=3, label=r"k=0$")
+fig, axs = plt.subplots(1, 2, figsize=(12, 8))
+plt.subplots_adjust(left=0.05, right=0.98, top=0.95, bottom=0.1, wspace=0.025, hspace=0)
+fig.suptitle("1-dim Gaussian Wave Packets", fontsize=20, color='w', x=0.55, y=0.99)
 
-linear_plot, = axs[0, 1].plot(grid, np.square(np.absolute(moving_packet)), '-b',
-                              linewidth=3, label=r"$k={}$".format(ko))
+axs[0].set_ylabel(r"|$\psi(x, t={:.1f})$|".format(t), fontdict={"fontsize": 25})
+axs[0].set_title(r"$k_o=0$", fontsize=20, x=0.1, y=0.935)
+axs[1].set_title(r"$k_o={}$".format(ko), fontsize=20, x=0.1, y=0.935)
 
-interference_plot, = axs[1, 0].plot(grid, np.square(np.absolute(interference)), '-g',
-                                    linewidth=3, label=r"Wave packets interference")
+for ax in axs:
+    ax.set_xlim(x_min, x_max)
+    ax.set_xticks(np.linspace(x_min, x_max, 4, endpoint=False))
+    ax.set_ylim(-1.1*w_max, 1.1*w_max)
+    ax.set_yticks([])
 
-asym_interference_plot, = axs[1, 1].plot(grid, np.square(np.absolute(asym_interference)), '-m',
-                                         linewidth=3, label=r"Asymmetric Wave packets interference")
+not_moving_plot, = axs[0].plot(grid, np.abs(not_moving_psi), '-w', linewidth=3, label=r"|$\psi|$", zorder=3)
+not_moving_plot_r, = axs[0].plot(grid, np.real(not_moving_psi), '-r', linewidth=1, label=r"$\Re(\psi)$", zorder=2)
+not_moving_plot_i, = axs[0].plot(grid, np.imag(not_moving_psi), '-b', linewidth=1, label=r"$\Im(\psi)$", zorder=1)
 
-anim = FuncAnimation(fig, update, init_func=init_plot, frames=total_frames, interval=1000 / fps,
-                     blit=False, repeat=True)
+moving_plot, = axs[1].plot(grid, np.abs(moving_psi), '-w', linewidth=3, zorder=3)
+moving_plot_r, = axs[1].plot(grid, np.real(moving_psi), '-r', linewidth=1, zorder=2)
+moving_plot_i, = axs[1].plot(grid, np.imag(moving_psi), '-b', linewidth=1, zorder=1)
 
-# now = datetime.now().strftime('%Y%m%d_%H%M%S')
-# file_name = f'./1dimWavePhaseDependency_{fps}fps_{num_seconds}seconds_{now}.mp4'
-# anim.save(file_name, fps=fps, dpi=160, bitrate=-1)
-plt.show()
+for ax in axs:
+    for side in ["top", "left", "right", "bottom"]:
+        ax.spines[side].set_linewidth(1)
+    ax.set_xlabel(r"$X$", fontdict={"fontsize": 15})
+axs[0].legend(loc=3)
+current_frame = 0
+
+
+def update(frame):
+    global t, axs, current_frame
+
+    if current_frame % fps == 0:
+        print(f"@ {current_frame//fps} second ...")
+
+    not_moving_psi = calculate_psi(t, 0, 0, sigma)
+    moving_psi = calculate_psi(t, xo, ko, sigma)
+
+    not_moving_plot.set_ydata(np.abs(not_moving_psi))
+    not_moving_plot_r.set_ydata(np.real(not_moving_psi))
+    not_moving_plot_i.set_ydata(np.imag(not_moving_psi))
+
+    moving_plot.set_ydata(np.abs(moving_psi))
+    moving_plot_r.set_ydata(np.real(moving_psi))
+    moving_plot_i.set_ydata(np.imag(moving_psi))
+
+    axs[0].set_ylabel(r"|$\psi(x, t={:.1f}\sigma^2)$|".format(t), fontdict={"fontsize": 20})
+
+    t += dt
+    current_frame += 1
+
+    return [not_moving_plot, not_moving_plot_r, not_moving_plot_i,
+            moving_plot, moving_plot_r, moving_plot_i]
+
+
+anim = FuncAnimation(fig, update, frames=total_frames, blit=False, repeat=True, interval=1000/fps)
+
+if save_animation:
+    anim.save("./1dimGaussian.mp4", writer="ffmpeg", fps=fps, dpi=160, bitrate=-1,
+              metadata={
+                  "title": "1 dimensional Gaussian Wave Packets",
+                  "artist": "Taher Amlaki",
+                  "subject": "Quantum Wave Packets"
+              })
+elif save_as_gif:
+    writer = PillowWriter(fps=fps, metadata={
+        "title": "1 dimensional Gaussian Wave Packets",
+        "artist": "Taher Amlaki",
+        "subject": "Quantum Mechanics"})
+    anim.save('./1dimGaussian.gif', dpi=80, writer=writer)
+else:
+    plt.show()
